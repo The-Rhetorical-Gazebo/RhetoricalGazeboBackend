@@ -36,7 +36,7 @@ app.use("/api/auth", require("./api/auth"));
 app.use("/api/articles", require("./api/articles"));
 app.use("/api/users", require("./api/users"));
 app.use("/api/uploads", require("./api/uploads"));
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5000;
 
 // Start the server
 app.listen(port, () => console.log(`Gazebo server listening on port ${port}!`));
