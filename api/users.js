@@ -6,14 +6,10 @@ const config = require("../config/default.json");
 const { check, validationResult } = require("express-validator");
 const normalize = require("normalize-url");
 const Writer = require("../models/Writer");
-const auth = require("../middleware/auth")
+const auth = require("../middleware/auth");
 const quotedPrintable = require("quoted-printable");
 
-
-
 //TODO: add route for normal users eventually
-
-
 
 // @route   POST api/users
 // @desc    Register user
@@ -33,23 +29,32 @@ router.post(
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ error:{msg: "Missing fields" , errors: errors.array() }});
-
+      return res
+        .status(400)
+        .json({ error: { msg: "Missing fields", errors: errors.array() } });
     }
-    const { name,pseudonym, email, password , token} = req.body;
+    const { name, pseudonym, email, password, token } = req.body;
     try {
       let user = await Writer.findOne({ email });
       // See if user exists
       if (user) {
-        return res
-          .status(400)
-          .json({ error: { msg: "That email is already associated with a writer." }});
-
+        return res.status(400).json({
+          error: { msg: "That email is already associated with a writer." },
+        });
       }
       //need to check token (encode referrer's email into token somehow)
-      const referrer = await Writer.findOne({email: atob(token), admin: true});
-      if(!referrer){
-        return res.status(400).json({error: {msg: "That token is invalid."}});
+      const admins = await Writer.find({
+        admin: true,
+      });
+      var adminPresent = false;
+      for (let i = 0; i < admins.length; i++) {
+        const emailMatch = await bcrypt.compare(token, admins[i].email);
+        adminPresent = true;
+      }
+      if (!adminPresent) {
+        return res
+          .status(400)
+          .json({ error: { msg: "That token is invalid." } });
       }
       //without normalize
       user = new Writer({
@@ -86,46 +91,50 @@ router.post(
   }
 );
 router.post("/admin", async (req, res) => {
-  try{
-  //TODO: consider adding token from another admin for converting to admin
-  const email = req.body.email;
-  const password = req.body.password
-  const token = req.body.token;
-  const user = await Writer.findOne({email: email});
-  if(!user){
-    return res.status(400).json({error: {msg: "Invalid credentials"}});
-  }
-  const passwordMatch = await bcrypt.compare(password, user.password);
-  if(!passwordMatch){
-    return res.status(400).json({error: {msg: "Invalid credentials"}});
-  }
-  const admin_referrer = await Writer.findOne({email: atob(token), admin: true});
-  if(!admin_referrer){
-    return res.status(400).json({"error": {msg: "Invalid credentials."}});
-  }
-  user.admin = true;
-  await user.save();
-  res.json({msg: "New administrator added."})
-  }
-  catch(err){
+  try {
+    const email = req.body.email;
+    const password = req.body.password;
+    const token = req.body.token;
+    const user = await Writer.findOne({ email: email });
+    if (!user) {
+      return res.status(400).json({ error: { msg: "Invalid credentials" } });
+    }
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
+      return res.status(400).json({ error: { msg: "Invalid credentials" } });
+    }
+    const admins = await Writer.find({
+      admin: true,
+    });
+    var adminPresent = false;
+    for (let i = 0; i < admins.length; i++) {
+      const emailMatch = await bcrypt.compare(token, admins[i].email);
+      adminPresent = true;
+    }
+    if (!adminPresent) {
+      return res.status(400).json({ error: { msg: "Invalid credentials." } });
+    }
+    user.admin = true;
+    await user.save();
+    res.json({ msg: "New administrator added." });
+  } catch (err) {
     console.error("Error posting admin:", err);
     res.status(500).send("Server error");
   }
-
 });
-router.get("/referralToken", auth, async(req, res) => {
+router.get("/referralToken", auth, async (req, res) => {
   //get referral token to allow registration access for utility app
-  try{
-  const user = await Writer.findOne({_id: req.user.id});
-  if(!user){
-    return res.status(404).json({error: {msg: "No user found."}})
-  }
-  var encrypt = quotedPrintable.encode(btoa(user.email));
-  return res.json({"referral_token": encrypt});
-  }
-  catch(err){
+  try {
+    const user = await Writer.findOne({ _id: req.user.id });
+    if (!user) {
+      return res.status(404).json({ error: { msg: "No user found." } });
+    }
+    const salt = await bcrypt.genSalt(5);
+    const encrypt = await bcrypt.hash(user.email, salt);
+    return res.json({ referral_token: encrypt });
+  } catch (err) {
     console.error("Error getting referral token:", err);
     res.status(500).send("Server error");
   }
-})
+});
 module.exports = router;
